@@ -1,7 +1,6 @@
+import axios from 'axios';
 import React, { useState } from 'react';
-import jwt from 'jsonwebtoken';
 
-const SECRET_KEY = "KarthikaSecretKey";
 
 interface RegisterForm {
   name: string;
@@ -18,6 +17,11 @@ const App: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true); 
   const [isAuthenticated, setIsAuthenticated] = useState(false); 
   const [error, setError] = useState<string | null>(null); 
+  const [isForgotPassword, setIsForgotPassword] = useState(false); 
+  const [isOtpScreen, setIsOtpScreen] = useState(false); 
+  const [isResetPassword, setIsResetPassword] = useState(false);
+  const [otp, setOtp] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
 
   const [register, setRegister] = useState<RegisterForm>({
     name: '',
@@ -44,7 +48,7 @@ const App: React.FC = () => {
     });
   };
 
-  const handleRegisterSubmit = (e: React.SyntheticEvent) => {
+  const handleRegisterSubmit = async(e: React.SyntheticEvent) => {
     e.preventDefault();
 
     if (!register.name || !register.email || !register.password) {
@@ -52,68 +56,148 @@ const App: React.FC = () => {
       return;
     }
 
-    const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    existingUsers.push(register);
-    localStorage.setItem('users', JSON.stringify(existingUsers));
-    alert('Registration successful!');
-    setRegister({ name: '', email: '', password: '' });
-    setIsLogin(true);
+    try{
+      const response = await axios.post('http://localhost:8005/api/register', register)
+      if(response.data.success){
+        alert("Regitration successful!")
+        setRegister({name: '', email:'', password: ''});
+        setIsLogin(true);
+      } else{
+        alert(response.data.message || 'Registration failed');
+      }
+    }catch(error){
+        console.error(error);
+        alert('An error occured during registration');
+        
+    }
+  }
+  const fetchProtectedData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No token found');
+      }
+  
+      const response = await axios.get('http://localhost:8005/api/protected-route', {
+        headers: {
+          Authorization: token,
+        },
+      });
+  
+      console.log(response.data); 
+      setIsAuthenticated(true);
+    } catch (error:any) {
+      console.error('Error accessing protected route:', error.response?.data || error.message);
+    }
   };
 
-  const handleLoginSubmit = (e: React.SyntheticEvent) => {
+  const handleLoginSubmit = async(e: React.SyntheticEvent) => {
     e.preventDefault();
 
-    if (!login.email || !login.password) {
+    const { email, password } = login;
+    if (!email || !password) {
       setError('Please fill out all fields.');
       return;
     }
-
-    const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    const user = existingUsers.find(
-      (user: RegisterForm) =>
-        user.email === login.email && user.password === login.password
-    );
-
-    if (user) {
-      const token = jwt.sign({ email: login.email }, SECRET_KEY, { expiresIn: "1h" });
-      localStorage.setItem('token', token);
-      setIsAuthenticated(true);
-      setError(null);
-    } else {
-      setError('Invalid email or password. Please try again.');
+    try{
+      const response = await axios.post('http://localhost:8005/api/login',{
+        email, 
+        password,
+      },{
+        headers: {
+          'Content-Type' : 'application/json',
+        },
+      });
+      if (response.data.accessToken) {
+        localStorage.setItem('token', `Bearer ${response.data.accessToken}`); 
+        
+        fetchProtectedData(); 
+      } else {
+        alert('Login failed: No token received.');
+      }
+  
+    } catch (error:any) {
+      alert('Login failed: ' + (error.response?.data?.message || 'Please try again.'));
+      console.error('Login error:', error); 
     }
   };
+
+  const handleForgotPassword = async(e: React.SyntheticEvent)=>{
+    e.preventDefault();
+
+    try{
+      const response = await axios.post('http://localhost:8005/api/forgot-password', {email: login.email})
+      if(response.data.sucess){
+        alert('OTP send successfully!');
+        setIsForgotPassword(false);
+        setIsOtpScreen(true);
+      }else{
+        alert(response.data.message || 'Error sending OTP.');
+      }
+    }catch(error:any){
+        console.error('Forgot password error:', error);
+        alert('Error occured');
+    }
+  }
+
+  const handleResetPasswordSubmit = async (e: React.SyntheticEvent) => {
+  e.preventDefault();
+
+  try {
+    const response = await axios.post('http://localhost:8005/api/reset-password', {
+      email: login.email,
+      otp,
+      newPassword,
+    });
+    if (response.data.success) {
+      alert('Password reset successful!');
+      setIsResetPassword(false);
+      setIsLogin(true);
+    } else {
+      alert('Password reset failed. Please try again.');
+    }
+  } catch (error) {
+    console.error('Password reset error:', error);
+    alert('Error resetting password.');
+  }
+};
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
     setLogin({ email: '', password: '' });
-  };
+  }
+    const handleOtpVerification = async(e: React.SyntheticEvent) => {
+        e.preventDefault();
 
-  const isTokenValid = () => {
-    const token = localStorage.getItem('token');
-    if (!token) return false;
-
-    try {
-      jwt.verify(token, SECRET_KEY);
-      return true;
-    } catch (error) {
-      return false;
+        try{
+          const response = await axios.post('http://localhost:8005/api/verify-otp', { email: login, otp })
+          if(response.data.success){
+            alert('OTP verified successfully!');
+            setIsOtpScreen(false);
+            setIsResetPassword(true);
+          }else{
+            alert('Invalid OTP. Please try again');
+          }
+        }catch(error){
+          console.error('OTP verification failed');
+          alert('Error verifying otp');
+          
+        }
     }
-  };
 
-  React.useEffect(() => {
-    if (isTokenValid()) {
-      setIsAuthenticated(true);
+    const showForgot = ()=>{
+      setIsLogin(false);
+      setIsForgotPassword(true);
+      setIsOtpScreen(false);
+      
     }
-  }, []);
 
   return (
     <div>
       {isAuthenticated ? (
         <div className="dashboard">
           <h1>Welcome to the Dashboard</h1>
-          <p>You are logged in!</p>
           <button className="btn btn-danger" onClick={handleLogout}>
             Logout
           </button>
@@ -175,6 +259,9 @@ const App: React.FC = () => {
                 <button type="submit" className="btn btn-primary">
                   Login
                 </button>
+                <p>
+                  <a href="#" onClick={showForgot}>Forgot Password?</a>
+                </p>
               </form>
             ) : (
               <form onSubmit={handleRegisterSubmit}>
@@ -223,8 +310,60 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+      {isForgotPassword && (
+        <form onSubmit={handleForgotPassword}>
+          <div className='mb-3'>
+              <label htmlFor='email' className='form-label'>Enter Email</label>
+              <input
+              type='email'
+              className='form-control'
+              id='email'
+              value={login.email}
+              onChange={handleLoginChange}/>
+          </div>
+          <button type='submit' className='btn btn-primary'>Send OTP</button>
+          <button type='button' className='btn btn-link' onClick={()=> setIsLogin(true)}>Back to login</button>
+        </form>
+      )}
+
+{isOtpScreen && (
+  <form onSubmit={handleOtpVerification}>
+    <div className="mb-3">
+      <label htmlFor="otp" className="form-label">Enter OTP</label>
+      <input
+        type="text"
+        className="form-control"
+        id="otp"
+        value={otp}
+        onChange={(e) => setOtp(e.target.value)}
+      />
+    </div>
+    <button type="submit" className="btn btn-primary">Verify OTP</button>
+    <button type="button" className="btn btn-link" onClick={() => setIsLogin(true)}>Back to Login</button>
+  </form>
+)}
+
+{isResetPassword && (
+  <form onSubmit={handleResetPasswordSubmit}>
+    <div className="mb-3">
+      <label htmlFor="newPassword" className="form-label">New Password</label>
+      <input
+        type="password"
+        className="form-control"
+        id="newPassword"
+        value={newPassword}
+        onChange={(e) => setNewPassword(e.target.value)}
+      />
+    </div>
+    <button type="submit" className="btn btn-primary">Reset Password</button>
+    <button type="button" className="btn btn-link" onClick={() => setIsLogin(true)}>Back to Login</button>
+  </form>
+)}
+
+
     </div>
   );
 };
+
 
 export default App;
