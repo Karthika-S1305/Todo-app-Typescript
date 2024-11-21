@@ -122,69 +122,71 @@ const App: React.FC = () => {
     }
   };
 
-  const handleForgotPassword = async(e: React.SyntheticEvent)=>{
+  const handleForgotPassword = async (e: React.SyntheticEvent) => {
     e.preventDefault();
-
-    try{
-      const response = await axios.post('http://localhost:8005/api/forgot-password', {email: login.email})
-      if(response.data.sucess){
-        alert('OTP send successfully!');
+    try {
+      const response = await axios.post('http://localhost:8005/api/forgot-password', {
+        email: login.email,
+      });
+      if (response.data.success) {
+        alert('OTP sent successfully!');
         setIsForgotPassword(false);
         setIsOtpScreen(true);
-      }else{
+      } else {
         alert(response.data.message || 'Error sending OTP.');
       }
-    }catch(error:any){
-        console.error('Forgot password error:', error);
-        alert('Error occured');
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      alert('Error occurred');
     }
-  }
+  };
+
+  const handleOtpVerification = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post('http://localhost:8005/api/verify-otp', {
+        email: login.email,
+        otp,
+      });
+      if (response.data.success) {
+        alert('OTP verified successfully!');
+        setIsOtpScreen(false);
+        setIsResetPassword(true);
+      } else {
+        alert('Invalid OTP. Please try again.');
+      }
+    } catch (error) {
+      console.error('OTP verification failed');
+      alert('Error verifying OTP');
+    }
+  };
 
   const handleResetPasswordSubmit = async (e: React.SyntheticEvent) => {
-  e.preventDefault();
-
-  try {
-    const response = await axios.post('http://localhost:8005/api/reset-password', {
-      email: login.email,
-      otp,
-      newPassword,
-    });
-    if (response.data.success) {
-      alert('Password reset successful!');
-      setIsResetPassword(false);
-      setIsLogin(true);
-    } else {
-      alert('Password reset failed. Please try again.');
+    e.preventDefault();
+    try {
+      const response = await axios.post('http://localhost:8005/api/reset-password', {
+        email: login.email,
+        otp,
+        newPassword,
+      });
+      if (response.data.success) {
+        alert('Password reset successful!');
+        setIsResetPassword(false);
+        setIsLogin(true);
+      } else {
+        alert('Password reset failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      alert('Error resetting password.');
     }
-  } catch (error) {
-    console.error('Password reset error:', error);
-    alert('Error resetting password.');
-  }
-};
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
     setLogin({ email: '', password: '' });
   }
-    const handleOtpVerification = async(e: React.SyntheticEvent) => {
-        e.preventDefault();
-
-        try{
-          const response = await axios.post('http://localhost:8005/api/verify-otp', { email: login, otp })
-          if(response.data.success){
-            alert('OTP verified successfully!');
-            setIsOtpScreen(false);
-            setIsResetPassword(true);
-          }else{
-            alert('Invalid OTP. Please try again');
-          }
-        }catch(error){
-          console.error('OTP verification failed');
-          alert('Error verifying otp');
-          
-        }
-    }
 
     const showForgot = ()=>{
       setIsLogin(false);

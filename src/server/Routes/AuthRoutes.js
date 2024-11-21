@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerUser, loginUser, forgotPassword, resetPassword, refreshToken} = require('../controllers/AuthControllers');
+const { registerUser, loginUser, forgotPassword, resetPassword, refreshToken, verifyOtp} = require('../controllers/AuthControllers');
 const { protect } = require('../middleware/Middleware');
 
 const router = express.Router();
@@ -19,7 +19,7 @@ router.get('/api/protected-route', protect, (req, res) => {
 //forgot password
 router.post('/api/forgot-password', forgotPassword);
 
-// router.post('/api/verify-otp', verifyOtp);
+router.post('/api/verify-otp', verifyOtp);
 
 //resetpassword
 router.post('/api/reset-password/', resetPassword);

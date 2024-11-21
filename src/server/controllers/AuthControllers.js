@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { generateAccessToken, generateRefreshToken } = require('../utils/Jwt');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs')
 
 // Register User
 const registerUser = async (req, res) => {
@@ -53,82 +54,87 @@ const loginUser = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
+
   try {
     const user = await User.findOne({ email });
-
     if (!user) {
-      return res.status(400).json({ message: 'No account with that email address exists' });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Generate reset token
-    const token = crypto.randomBytes(20).toString('hex');
-    user.resetPasswordToken = token;
-    user.resetPasswordExpires = Date.now() + 3600000; 
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Save user with the reset token and expiration
+    user.otp = otp;
+    user.otpExpiry = otpExpiry;
     await user.save();
 
     const transporter = nodemailer.createTransport({
       service: 'Gmail',
       auth: {
         user: 'karthika8849@gmail.com',
-        pass: 'hubnsjawtqsxcpli', 
+        pass: 'obslhxqqcuacpbxg',
       },
     });
 
-    const mailOptions = {
-      to: user.email,
-      from: 'karthika8849@gmail.com',
-      subject: 'Password Reset',
-      text: `You are receiving this because you requested a password reset.
-             Click this link to reset your password: 
-             http://localhost:3000/api/reset-password/${token}`
-    };
+    await transporter.sendMail({
+      to: email,
+      subject: 'OTP for Password Reset',
+      text: `OTP is ${otp}. It is valid for 10 minutes.`,
+    });
 
-    await transporter.sendMail(mailOptions);
-    res.json({ message: 'Password reset email sent' });
+    res.json({ success: true, message: 'OTP sent to your email' });
   } catch (error) {
-    console.error('Error during password reset request:', error.message);
-    res.status(500).json({ message: 'Error occurred. Please try again.' });
+    console.error('Error in forgot-password:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+const verifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.otp !== otp || user.otpExpiry < Date.now()) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    }
+
+    res.json({ success: true, message: 'OTP verified' });
+  } catch (error) {
+    console.error('Error in verify-otp:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
 
 
 const resetPassword = async (req, res) => {
-  const { password } = req.body;
-  const { token } = req.params;
-
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-
-  if (!passwordRegex.test(password)) {
-    return res.status(400).json({
-      message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, one special character, and be at least 8 characters long.',
-    });
-  }
+  const { email, otp, newPassword } = req.body;
 
   try {
-    const user = await User.findOne({
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: Date.now() } 
-    });
-
+    const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Password reset token is invalid or has expired' });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.password = password;
+    if (user.otp !== otp || user.otpExpiry < Date.now()) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    }
 
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
+    user.password = newPassword;
+    user.otp = null;
+    user.otpExpiry = null;
+    await user.save();
 
-    await user.save(); 
-
-    res.json({ message: 'Password reset successfully. You can now log in with your new password.' });
+    res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
-    console.error('Error resetting password:', error.message);
-    res.status(500).json({ message: 'Error occurred during password reset.' });
+    console.error('Error in reset-password:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
+
 
 // Refresh Token Handler
 const refreshToken = (req, res) => {
@@ -154,6 +160,7 @@ module.exports = {
   registerUser, 
   loginUser,
   forgotPassword, 
+  verifyOtp,
   resetPassword,
   refreshToken, 
 };
